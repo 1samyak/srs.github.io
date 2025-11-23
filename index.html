@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SANRITY TERMINAL</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            --terminal-green: #00ff90;
+            --terminal-bg: #000;
+            --terminal-dim: rgba(0, 255, 144, 0.1);
+            --scan-color: rgba(0, 255, 144, 0.03);
+        }
+
+        * {
+            box-sizing: border-box;
+            scrollbar-width: thin;
+            scrollbar-color: var(--terminal-green) var(--terminal-bg);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--terminal-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--terminal-green);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-corner {
+            background: var(--terminal-bg);
+        }
+
+        body {
+            background: var(--terminal-bg);
+            color: var(--terminal-green);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            min-height: 100vh;
+            text-shadow: 0 0 2px rgba(0, 255, 144, 0.5);
+        }
+
+        /* CRT Scanline Effect */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom,
+                    transparent 50%,
+                    var(--scan-color) 51%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 9999;
+            animation: scan 10s linear infinite;
+        }
+
+        .header {
+            border-bottom: 2px solid var(--terminal-green);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 255, 144, 0.05);
+            box-shadow: 0 0 10px rgba(0, 255, 144, 0.2);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(2px);
+        }
+
+        .header h2 {
+            margin: 0;
+            font-size: clamp(1.2rem, 4vw, 1.5rem);
+            letter-spacing: 2px;
+        }
+
+        #status {
+            font-size: 0.9rem;
+            padding: 4px 8px;
+            border: 1px solid var(--terminal-green);
+            border-radius: 4px;
+            background: var(--terminal-dim);
+            animation: blink 2s infinite;
+        }
+
+        .content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Ticker Section */
+        .ticker-section {
+            width: 100%;
+        }
+
+        .ticker-wrapper {
+            border: 2px solid var(--terminal-green);
+            padding: 0;
+            border-radius: 8px;
+            background: rgba(0, 255, 144, 0.02);
+            overflow: hidden;
+            position: relative;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            box-shadow: inset 0 0 15px rgba(0, 255, 144, 0.15);
+        }
+
+        .ticker-content {
+            display: flex;
+            white-space: nowrap;
+            animation: scroll 300s linear infinite;
+            padding-left: 100%;
+            /* Start from right */
+        }
+
+        .ticker-content:hover {
+            animation-play-state: paused;
+        }
+
+        .ticker-item {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .ticker-item span {
+            margin-right: 8px;
+        }
+
+        /* Portfolio Section */
+        .portfolio-section {
+            border: 2px solid var(--terminal-green);
+            border-radius: 8px;
+            padding: 20px;
+            background: rgba(0, 255, 144, 0.02);
+            box-shadow: inset 0 0 15px rgba(0, 255, 144, 0.1);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .portfolio-section.hidden {
+            display: none;
+        }
+
+        .portfolio-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .portfolio-title {
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+
+        .portfolio-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            border: 1px solid var(--terminal-green);
+            padding: 12px;
+            border-radius: 4px;
+            background: rgba(0, 255, 144, 0.05);
+            transition: transform 0.2s;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 255, 144, 0.1);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            border: 1px solid rgba(0, 255, 144, 0.3);
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        /* Table Styling */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .holdings-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .holdings-table th,
+        .holdings-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 255, 144, 0.3);
+        }
+
+        .holdings-table th {
+            border-bottom: 2px solid var(--terminal-green);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .holdings-table tr:hover {
+            background: rgba(0, 255, 144, 0.05);
+        }
+
+        /* Utilities */
+        .up {
+            color: #00ff90;
+        }
+
+        .down {
+            color: #ff3366;
+        }
+
+        .switch-btn {
+            background: rgba(0, 255, 144, 0.1);
+            border: 1px solid var(--terminal-green);
+            color: var(--terminal-green);
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        .switch-btn:hover {
+            background: var(--terminal-green);
+            color: #000;
+            box-shadow: 0 0 15px var(--terminal-green);
+        }
+
+        footer {
+            border-top: 1px solid var(--terminal-green);
+            padding: 15px;
+            text-align: center;
+            background: rgba(0, 255, 144, 0.05);
+            font-size: 0.8rem;
+            margin-top: auto;
+        }
+
+        @keyframes scroll {
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+
+            .portfolio-header {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+
+    <div class="header">
+        <h2>SANRITY TERMINAL</h2>
+        <span id="status">WORK IN PROGRESS [NO REAL DATA]</span>
+    </div>
+
+    <div class="content">
+        <!-- Controls -->
+        <div class="ticker-section">
+            <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+                <button class="switch-btn" id="togglePortfolioBtn">TOGGLE PORTFOLIO</button>
+            </div>
+
+            <div class="ticker-wrapper">
+                <div class="ticker-content" id="tickerContent">
+                    <!-- Ticker items will be injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Portfolio Dashboard -->
+        <div class="portfolio-section" id="portfolioSection">
+            <div class="portfolio-header">
+                <div class="portfolio-title">SANRITY VISION 2027</div>
+                <div style="font-size: 0.8rem; opacity: 0.7;">AUTO-REFRESH: ON</div>
+            </div>
+
+            <div class="portfolio-stats">
+                <div class="stat-item">
+                    <div class="stat-label">TOTAL VALUE</div>
+                    <div class="stat-value up" id="portfolioValue">₹0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">DAY GAIN</div>
+                    <div class="stat-value" id="dayGain">₹0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">TOTAL GAIN</div>
+                    <div class="stat-value up" id="totalGain">₹0</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="portfolioChart"></canvas>
+            </div>
+
+            <div>
+                <div
+                    style="font-size: 0.9rem; margin-bottom: 10px; opacity: 0.8; border-bottom: 1px solid var(--terminal-green); display: inline-block; padding-bottom: 2px;">
+                    TOP HOLDINGS</div>
+                <div class="table-container">
+                    <table class="holdings-table">
+                        <thead>
+                            <tr>
+                                <th>SYMBOL</th>
+                                <th>PRICE</th>
+                                <th>QTY</th>
+                                <th>CHANGE</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Sanrity Terminal (Make with ❤️| Made for $ | Made by SAMYAK JAIN) &copy; 2025 | System Time: <span
+            id="timestamp">--:--:--</span>
+    </footer>
+
+    <script>
+        // Configuration
+        const NSE_SCRIPS = ["NIFTY50", "SENSEX", "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "SBIN", "INFY", "ITC", "HINDUNILVR", "L&T", "BHARTIARTL", "KOTAKBANK", "AXISBANK", "ADANIENT", "TITAN", "MARUTI", "ULTRACEMCO", "SUNPHARMA", "BAJFINANCE", "WIPRO", "TATASTEEL", "HCLTECH", "JSWSTEEL", "NTPC", "POWERGRID", "M&M", "ONGC", "COALINDIA", "EICHERMOT", "GRASIM", "HEROMOTOCO", "HINDALCO", "TECHM", "BRITANNIA", "NESTLEIND", "CIPLA", "APOLLOHOSP", "DIVISLAB", "DRREDDY", "LTIM", "SBILIFE", "BAJAJ-AUTO", "TATAMOTORS", "ADANIPORTS", "UPL", "ASIANPAINT"];
+
+        const PORTFOLIO_DATA = [
+            { symbol: "NIPPON", price: 138.86, quantity: 831, dayGain: 149.59, change: 0.13 },
+            { symbol: "ORCHID", price: 870.00, quantity: 51, dayGain: 15.30, change: 0.03 },
+            { symbol: "ELCID", price: 132500.00, quantity: 1, dayGain: 0.00, change: 0.00 },
+            { symbol: "KOTAK", price: 30.96, quantity: 1151, dayGain: -57.55, change: -0.16 },
+            { symbol: "ZEEL", price: 98.07, quantity: 151, dayGain: -45.30, change: -0.30 },
+            { symbol: "BAJAJHFL", price: 105.39, quantity: 351, dayGain: -358.02, change: -0.96 },
+            { symbol: "AWL", price: 273.60, quantity: 281, dayGain: -885.15, change: -1.14 },
+            { symbol: "ICRA", price: 6079.50, quantity: 21, dayGain: -1522.50, change: -1.18 },
+            { symbol: "ACC", price: 1828.00, quantity: 51, dayGain: -1193.40, change: -1.26 },
+            { symbol: "AMARA", price: 954.40, quantity: 71, dayGain: -1008.20, change: -1.47 }
+        ];
+
+        // State
+        let chartInstance = null;
+        let chartDataPoints = []; // Store chart data to prevent random resetting
+
+        // Initialize Chart Data (Simulate history)
+        function initChartData() {
+            const data = [];
+            let value = 1170000; // Base value
+            for (let i = 0; i < 30; i++) {
+                value += (Math.random() - 0.48) * 3000; // Slight upward trend
+                data.push(Math.round(value));
+            }
+            return data;
+        }
+        chartDataPoints = initChartData();
+
+        // DOM Elements
+        const tickerContent = document.getElementById('tickerContent');
+        const portfolioSection = document.getElementById('portfolioSection');
+        const toggleBtn = document.getElementById('togglePortfolioBtn');
+        const timestampEl = document.getElementById('timestamp');
+
+        // --- Ticker Logic ---
+        function generateTickerHTML() {
+            // Duplicate list to create seamless loop effect
+            const fullList = [...NSE_SCRIPS, ...NSE_SCRIPS];
+            return fullList.map(symbol => {
+                const isUp = Math.random() > 0.45; // Slightly bullish bias
+                const price = (Math.random() * 3000 + 100).toFixed(2);
+                const change = (Math.random() * 2).toFixed(2);
+                const colorClass = isUp ? 'up' : 'down';
+                const arrow = isUp ? '▲' : '▼';
+
+                return `
+                    <div class="ticker-item">
+                        <span style="color: #fff; opacity: 0.8;">${symbol}</span>
+                        <span class="${colorClass}">₹${price}</span>
+                        <span class="${colorClass}" style="font-size: 0.8em;">${arrow} ${change}%</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function initTicker() {
+            tickerContent.innerHTML = generateTickerHTML();
+        }
+
+        // --- Chart Logic ---
+        function renderChart() {
+            const ctx = document.getElementById('portfolioChart').getContext('2d');
+
+            // Generate labels for last 30 days
+            const labels = Array.from({ length: 30 }, (_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (29 - i));
+                return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            });
+
+            if (chartInstance) {
+                // Update data instead of destroying
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = chartDataPoints;
+                chartInstance.update('none'); // 'none' mode for performance
+                return;
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Portfolio Value',
+                        data: chartDataPoints,
+                        borderColor: '#00ff90',
+                        backgroundColor: (context) => {
+                            const ctx = context.chart.ctx;
+                            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                            gradient.addColorStop(0, 'rgba(0, 255, 144, 0.2)');
+                            gradient.addColorStop(1, 'rgba(0, 255, 144, 0)');
+                            return gradient;
+                        },
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointBackgroundColor: '#00ff90',
+                        pointBorderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index',
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 20, 10, 0.9)',
+                            titleColor: '#00ff90',
+                            bodyColor: '#fff',
+                            borderColor: '#00ff90',
+                            borderWidth: 1,
+                            displayColors: false,
+                            callbacks: {
+                                label: (context) => `Value: ₹${context.parsed.y.toLocaleString('en-IN')}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            ticks: {
+                                color: '#00ff90',
+                                font: { family: "'Courier New', monospace" },
+                                callback: (value) => '₹' + (value / 100000).toFixed(1) + 'L'
+                            },
+                            grid: { color: 'rgba(0, 255, 144, 0.1)' },
+                            border: { display: false }
+                        },
+                        x: {
+                            ticks: { color: '#00ff90', font: { family: "'Courier New', monospace" }, maxRotation: 0, maxTicksLimit: 6 },
+                            grid: { display: false },
+                            border: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- Dashboard Logic ---
+        function updateDashboard() {
+            // Calculate totals
+            let totalValue = PORTFOLIO_DATA.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            let dayGain = PORTFOLIO_DATA.reduce((sum, item) => sum + item.dayGain, 0);
+
+            // Add some random noise to simulate live market
+            const noise = (Math.random() - 0.5) * 100;
+            totalValue += noise;
+            dayGain += noise;
+
+            // Update DOM
+            document.getElementById('portfolioValue').textContent = `₹${totalValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+            const dayGainEl = document.getElementById('dayGain');
+            dayGainEl.textContent = (dayGain > 0 ? '+' : '') + `₹${dayGain.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+            dayGainEl.className = `stat-value ${dayGain >= 0 ? 'up' : 'down'}`;
+
+            document.getElementById('totalGain').textContent = `+₹${(389508.51 + noise).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+            // Update Table
+            const tbody = document.getElementById('holdingsTbody');
+            tbody.innerHTML = PORTFOLIO_DATA.slice(0, 8).map(item => `
+                <tr>
+                    <td style="color: ${item.change >= 0 ? '#00ff90' : '#ff3366'}">${item.symbol}</td>
+                    <td>₹${item.price.toLocaleString('en-IN')}</td>
+                    <td>${item.quantity}</td>
+                    <td style="color: ${item.change >= 0 ? '#00ff90' : '#ff3366'}">
+                        ${item.change >= 0 ? '▲' : '▼'} ${Math.abs(item.change).toFixed(2)}%
+                    </td>
+                </tr>
+            `).join('');
+
+            // Update Chart Data (Simulate live point)
+            // Remove first point, add new point based on latest variation
+            const lastVal = chartDataPoints[chartDataPoints.length - 1];
+            const newVal = lastVal + (Math.random() - 0.45) * 500;
+            chartDataPoints.shift();
+            chartDataPoints.push(newVal);
+            renderChart();
+        }
+
+        // --- Core Functions ---
+        function updateClock() {
+            timestampEl.textContent = new Date().toLocaleTimeString('en-IN');
+        }
+
+        // Event Listeners
+        toggleBtn.addEventListener('click', () => {
+            portfolioSection.classList.toggle('hidden');
+            toggleBtn.textContent = portfolioSection.classList.contains('hidden') ? 'SHOW PORTFOLIO' : 'HIDE PORTFOLIO';
+        });
+
+        // Initialization
+        initTicker();
+        updateDashboard();
+        updateClock();
+
+        // Loops
+        setInterval(updateClock, 1000); // Clock every second
+        setInterval(updateDashboard, 3000); // Data every 3 seconds
+
+    </script>
+</body>
+
+</html>
